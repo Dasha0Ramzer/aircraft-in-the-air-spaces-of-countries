@@ -9,6 +9,7 @@ def test_filter_aeroplanes(aeroplanes_1: list[Any]) -> None:
 
 def test_get_aeroplanes_by_altitude(aeroplanes_1: list[Any]) -> None:
     assert [plane.geo_altitude for plane in get_aeroplanes_by_altitude(aeroplanes_1, "1-2")] == [1, 2]
+    assert [plane.geo_altitude for plane in get_aeroplanes_by_altitude(aeroplanes_1, "1")] == [1]
 
 
 def test_sort_aeroplanes(aeroplanes_1: list[Any]) -> None:

@@ -11,7 +11,13 @@ def filter_aeroplanes(aeroplanes: list["Aeroplane"], countries: list[str]) -> li
     :return: отфильтрованный список самолетов
     """
 
-    filtered_aeroplanes = [plane for plane in aeroplanes if plane.country in countries]
+    countries = [country.lower() for country in countries]
+    filtered_aeroplanes = []
+    for plane in aeroplanes:
+        for country in countries:
+            if country in plane.country.lower():
+                filtered_aeroplanes.append(plane)
+                break
     return filtered_aeroplanes
 
 
@@ -23,7 +29,10 @@ def get_aeroplanes_by_altitude(aeroplanes: list[Any], altitude_range: str) -> li
     :return: отфильтрованный список самолетов
     """
 
-    start_str, end_str = altitude_range.replace(" ", "").split("-")
+    if "-" in altitude_range:
+        start_str, end_str = altitude_range.replace(" ", "").split("-")
+    else:
+        start_str = end_str = altitude_range
 
     start = int(start_str)
     end = int(end_str)

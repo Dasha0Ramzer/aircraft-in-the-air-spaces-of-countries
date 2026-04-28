@@ -1,7 +1,9 @@
 import json
+import os
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
+import requests
 from requests import get
 
 
@@ -66,19 +68,32 @@ class AeroplanesAPI(AbstractAeroplanesAPI):
             "limit": 1,
         }
 
-        data = self._connect_to_api(self._openstreetmap_url, params_nominatim, headers_nominatim)
-        geo_coordinates = data[0].get("boundingbox")
+        try:
+            data = self._connect_to_api(self._openstreetmap_url, params_nominatim, headers_nominatim)
+            if not data:
+                print(f"Данные для страны {country} не найдены.")
+                return
 
-        # Параметры для фильтрации самолетов по их географическим координатам.
-        params = {
-            "lamin": geo_coordinates[0],
-            "lamax": geo_coordinates[1],
-            "lomin": geo_coordinates[2],
-            "lomax": geo_coordinates[3],
-        }
+            geo_coordinates = data[0].get("boundingbox")
 
-        response_data = self._connect_to_api(self._opensky_url, params)
-        self._aeroplanes = response_data
+            if not geo_coordinates:
+                print(f"Географические координаты для страны {country} не найдены.")
+                return
+
+            params = {
+                "lamin": geo_coordinates[0],
+                "lamax": geo_coordinates[1],
+                "lomin": geo_coordinates[2],
+                "lomax": geo_coordinates[3],
+            }
+
+            response_data = self._connect_to_api(self._opensky_url, params)
+            self._aeroplanes = response_data
+
+        except requests.exceptions.RequestException as e:
+            print(f"Произошла ошибка при подключении к API: {e}")
+        except Exception as e:
+            print(f"Произошла непредвиденная ошибка: {e}")
 
 
 class Aeroplane:
@@ -90,46 +105,44 @@ class Aeroplane:
 
     aeroplane_count = 0
 
-    def __init__(self, list_aeroplanes: list[Union[str, float, bool]]) -> None:
+    def __init__(self, list_aeroplanes: list[Any]) -> None:
         """
         Метод-конструктор
         :param list_aeroplanes: список данных о самолете
         """
 
-        self._validate_velocity(list_aeroplanes[9], list_aeroplanes[8])
-        self._validate_altitude(list_aeroplanes[13], list_aeroplanes[8])
+        self._validate_velocity(list_aeroplanes[9])
+        self._validate_altitude(list_aeroplanes[13])
 
-        self.ICAO24 = list_aeroplanes[0]  # уникальный идентификатор
-        self.callsign = list_aeroplanes[1]  # позывной рейса
-        self.country = list_aeroplanes[2]  # Страна регистрации ВС
-        self.on_ground = list_aeroplanes[8]  # находится ли самолёт на земле
-        self.velocity = list_aeroplanes[9]  # горизонтальная скорость (м/с)
-        self.geo_altitude = list_aeroplanes[13]  # геометрическая высота (м)
+        self.ICAO24: str = list_aeroplanes[0]  # уникальный идентификатор
+        self.callsign: str = list_aeroplanes[1]  # позывной рейса
+        self.country: str = list_aeroplanes[2]  # Страна регистрации ВС
+        self.on_ground: bool = list_aeroplanes[8]  # находится ли самолёт на земле
+        self.velocity: float | None = list_aeroplanes[9]  # горизонтальная скорость (м/с)
+        self.geo_altitude: float | None = list_aeroplanes[13]  # геометрическая высота (м)
 
         Aeroplane.aeroplane_count += 1
 
     @staticmethod
-    def _validate_velocity(velocity: Any, on_ground: Union[str, float, bool]) -> None:
+    def _validate_velocity(velocity: Any) -> None:
         """
         Метод-валидатор проверки на отрицательную скорость полета
         :param velocity: скорость самолета
-        :param on_ground: находится ли самолет в воздухе
         :return: если скорость отрицательная, то появится ошибка ValueError
         """
 
-        if velocity is not None and velocity < 0 and not on_ground:
+        if velocity is not None and velocity < 0:
             raise ValueError("Скорость не может быть отрицательной")
 
     @staticmethod
-    def _validate_altitude(geo_altitude: Any, on_ground: Union[str, float, bool]) -> None:
+    def _validate_altitude(geo_altitude: Any) -> None:
         """
         Метод-валидатор проверки на отрицательную высоту полета
         :param geo_altitude: географическая высота самолета
-        :param on_ground: находится ли самолет в воздухе
         :return: если высота отрицательная, то появится ошибка ValueError
         """
 
-        if geo_altitude is not None and geo_altitude < 0 and not on_ground:
+        if geo_altitude is not None and geo_altitude < 0:
             raise ValueError("Высота не может быть отрицательной")
 
     @staticmethod
@@ -156,7 +169,7 @@ class Aeroplane:
         :return: булево значение
         """
 
-        return self.geo_altitude < other.geo_altitude
+        return (self.geo_altitude, self.velocity) < (other.geo_altitude, other.velocity)
 
     def __gt__(self, other: Any) -> Any:
         """
@@ -165,7 +178,7 @@ class Aeroplane:
         :return: булево значение
         """
 
-        return self.geo_altitude > other.geo_altitude
+        return (self.geo_altitude, self.velocity) > (other.geo_altitude, other.velocity)
 
     def __eq__(self, other: Any) -> Any:
         """
@@ -174,7 +187,7 @@ class Aeroplane:
         :return: булево значение
         """
 
-        return self.geo_altitude == other.geo_altitude
+        return (self.geo_altitude, self.velocity) == (other.geo_altitude, other.velocity)
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -215,13 +228,13 @@ class JSONSaver(AbstractJSONSaver):
     Класс для сохранения данных в файл в формате json
     """
 
-    def __init__(self, filename: str = "./data/aeroplanes.json") -> None:
+    def __init__(self, filename: str = "aeroplanes.json") -> None:
         """
         Метод-конструктор
-        :param filename: путь к файлу, по умолчанию "./data/aeroplanes.json"
+        :param filename: имя файла, по умолчанию "aeroplanes.json"
         """
 
-        self._filename = filename
+        self._filename = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "data", filename))
 
     def _load_data(self) -> Any:
         """
@@ -239,6 +252,7 @@ class JSONSaver(AbstractJSONSaver):
         Метод сохраняет данные в JSON-файл
         """
 
+        os.makedirs(os.path.dirname(self._filename), exist_ok=True)
         with open(self._filename, "w") as file:
             json.dump(data, file, indent=4)
 
@@ -259,8 +273,9 @@ class JSONSaver(AbstractJSONSaver):
         """
 
         data = self._load_data()
-        try:
-            data.remove(aeroplane)
-        except ValueError:
-            print("Самолёт не найден в списке")
+
+        aeroplane_dict = aeroplane.to_dict()
+
+        data = [entry for entry in data if entry.get("ICAO24") != aeroplane_dict["ICAO24"]]
+
         self._save_data(data)
