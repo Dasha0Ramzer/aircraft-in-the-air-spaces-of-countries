@@ -1,6 +1,7 @@
 import json
+import os
 from typing import Any
-from unittest.mock import mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 import requests_mock
@@ -45,14 +46,22 @@ def test_get_aeroplanes() -> None:
         assert api._aeroplanes == {"states": []}
 
 
+def test_get_aeroplanes_error(capsys) -> None:
+    api = AeroplanesAPI()
+    api.get_aeroplanes("123")
+
+    captured = capsys.readouterr()
+    assert "Данные для страны 123 не найдены." in captured.out
+
+
 def test_validate_velocity(aeroplanes_1: list[Any]) -> None:
     with pytest.raises(ValueError, match="Скорость не может быть отрицательной"):
-        Aeroplane._validate_velocity(-100, False)
+        Aeroplane._validate_velocity(-100)
 
 
 def test_validate_altitude(aeroplanes_1: list[Any]) -> None:
     with pytest.raises(ValueError, match="Высота не может быть отрицательной"):
-        Aeroplane._validate_altitude(-100, False)
+        Aeroplane._validate_altitude(-100)
 
 
 def test_lt(aeroplanes_1: list[Any]) -> None:
@@ -80,11 +89,8 @@ def test_to_dict(aeroplanes_1: list[Any]) -> None:
 
 def test_json_saver() -> None:
     saver_default = JSONSaver()
-    assert saver_default._filename == "./data/aeroplanes.json", "Ошибка: неправильный путь по умолчанию"
-
-    custom_path = "./custom/path.json"
-    saver_custom = JSONSaver(custom_path)
-    assert saver_custom._filename == custom_path, "Ошибка: пользовательский путь не установлен"
+    expected_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "data", "aeroplanes.json"))
+    assert saver_default._filename == expected_path
 
 
 def test_load_data_file_exists() -> None:
@@ -104,11 +110,24 @@ def test_load_data_file_not_found() -> None:
         assert result == []
 
 
-def test_save_data() -> None:
+@patch("builtins.open", new_callable=mock_open)
+@patch("os.makedirs")
+def test_save_data(mocked_makedirs: MagicMock, mocked_open: MagicMock) -> None:
     data = [{"key": "value"}]
+    expected_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "data", "dummy_file.json"))
+    saver = JSONSaver("dummy_file.json")
+    saver._save_data(data)
+    mocked_open.assert_called_once_with(expected_path, "w")
 
-    with patch("builtins.open", mock_open()) as mocked_file:
-        saver = JSONSaver("dummy_file.json")
-        saver._save_data(data)
 
-        mocked_file.assert_called_once_with("dummy_file.json", "w")
+def test_add_aeroplane(json_saver: "JSONSaver", aeroplane: "Aeroplane") -> None:
+    json_saver.add_aeroplane(aeroplane)
+    data = json_saver._load_data()
+    assert aeroplane.to_dict() in data
+
+
+def test_delete_aeroplane(json_saver: "JSONSaver", aeroplane: "Aeroplane") -> None:
+    json_saver.add_aeroplane(aeroplane)
+    json_saver.delete_aeroplane(aeroplane)
+    data = json_saver._load_data()
+    assert aeroplane.to_dict() not in data

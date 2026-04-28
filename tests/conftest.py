@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from src.utils import Aeroplane
+from src.utils import Aeroplane, JSONSaver
 
 
 @pytest.fixture
@@ -17,3 +17,14 @@ def aeroplanes_1() -> list[Any]:
     }
     pl_1 = Aeroplane.cast_to_object_list(var)
     return pl_1
+
+
+@pytest.fixture
+def json_saver() -> "JSONSaver":
+    return JSONSaver()
+
+
+@pytest.fixture
+def aeroplane() -> "Aeroplane":
+    aeroplane_data = ["test_1", "test_1", "China", 1, 1, 1, 1, 1, False, 1, 1, 1, None, 1, "2061", False, 0]
+    return Aeroplane(aeroplane_data)

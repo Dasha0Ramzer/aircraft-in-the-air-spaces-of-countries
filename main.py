@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from src.functions import filter_aeroplanes, get_aeroplanes_by_altitude, get_top_aeroplanes, sort_aeroplanes
@@ -13,15 +14,15 @@ def print_aeroplanes(aeroplanes: list[Any], country: str) -> None:
 
     print()
     print(f"Всего самолетов над страной {country}: {Aeroplane.aeroplane_count}")
-    count = 1
+    counter = 1
     print()
     if len(aeroplanes) == 0:
         print("Самолетов по Вашим данным не найдено")
     else:
         print("Самолеты по Вашим данным:")
         for plane in aeroplanes:
-            print(f"{count}. Страна регистрации ВС - {plane.country}, находится на высоте {plane.geo_altitude} м.")
-            count += 1
+            print(f"{counter}. Страна регистрации ВС - {plane.country}, находится на высоте {plane.geo_altitude} м.")
+            counter += 1
 
 
 def user_interaction() -> None:
@@ -29,17 +30,39 @@ def user_interaction() -> None:
     Главная функция для взаимодействия с пользователем
     """
 
-    country = input("Введите название страны: ")
-    top_n = int(input("Введите количество самолетов для вывода в топ N: "))
-    filter_words = input("Введите названия стран для фильтрации по стране регистрации: ").split()
-    altitude_range = input("Введите диапазон высот полета (пример: 100000 - 150000): ")
+    while True:
+        country = input("Введите название страны: ").lower()
+        api = AeroplanesAPI()
+        api.get_aeroplanes(country)
+        if api._aeroplanes and api._aeroplanes["states"] is not None:
+            aeroplanes_objects = Aeroplane.cast_to_object_list(api._aeroplanes)
+            break
+        else:
+            print("Самолетов над данной страной нет. Повторите попытку.")
 
-    api = AeroplanesAPI()
-    api.get_aeroplanes(country)
-    aeroplanes_objects = Aeroplane.cast_to_object_list(api._aeroplanes)
     json_saver = JSONSaver()
     for aeroplane in aeroplanes_objects:
         json_saver.add_aeroplane(aeroplane)
+
+    while True:
+        try:
+            top_n = int(input("Введите количество самолетов для вывода в топ N: "))
+            if top_n > 0:
+                break
+            else:
+                print("Число должно быть больше нуля, повторите попытку.")
+        except ValueError:
+            print("Введено неверное значение, повторите попытку.")
+
+    filter_words = input("Введите названия стран для фильтрации по стране регистрации: ").split()
+
+    while True:
+        altitude_range = input("Введите диапазон высот полета (пример: 100000 - 150000): ")
+        pattern = r"^[\d\s-]+$"
+        if re.match(pattern, altitude_range):
+            break
+        else:
+            print("Введено некорректное значение, повторите попытку.")
 
     filtered_aeroplanes = filter_aeroplanes(aeroplanes_objects, filter_words)
 
